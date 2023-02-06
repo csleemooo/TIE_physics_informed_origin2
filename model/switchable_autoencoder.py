@@ -169,7 +169,7 @@ class switchable_decoder(nn.Module):
         x = self.l8(x, shared_code)
         x = self.l9(x, shared_code)
 
-        x = self.conv_out(x)
+        x = torch.sigmoid(self.conv_out(x))
 
         return x
 
