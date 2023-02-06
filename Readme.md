@@ -1,6 +1,6 @@
 
 ```
-git clone https://github.com/csleemooo/tie_physics_informed.git
+git clone https://github.com/csleemooo/TIE_physics_informed_origin2.git
 ```
 
 ```
