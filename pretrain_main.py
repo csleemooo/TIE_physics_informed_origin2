@@ -22,7 +22,7 @@ if __name__ == '__main__':
     args.distance_normalize_constant = args.distance_min / args.distance_normalize
 
     data_name_holo = "tie_bead_training_data"
-    args.save_folder = data_name_holo + '_pre_train_wo_skip'
+    args.save_folder = data_name_holo + '_' + args.save_name
 
     args.project_path = os.path.join(args.model_root, args.project)
     make_path(args.project_path)

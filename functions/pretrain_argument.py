@@ -10,6 +10,7 @@ def parse_args():
     parser.add_argument("--model_root", default='D:\\', type=str)
     parser.add_argument("--data_root", default='D:\\TIE_physics_informed\\data', type=str)
     parser.add_argument("--data_name_holo", default= "tie_bead_training_data", type=str)
+    parser.add_argument("--save_name", default="", type=str)
     parser.add_argument("--device", default='cuda', type=str)
     parser.add_argument("--norm_use", default=True, type=bool)
     parser.add_argument("--lrelu_use", default=False, type=bool)
