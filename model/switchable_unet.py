@@ -134,7 +134,7 @@ class switchable_autoencoder(nn.Module):
         if train:
             loss_distance = self.mse_loss(d_pred_x, d_x) + self.mse_loss(d_pred_t, d_t)
             loss_identity = self.l1_loss(decoded_x, x)
-            loss_content = self.mse_loss(encoded_t, encoded)
+            loss_content = self.mse_loss(encoded_t[-1], encoded[-1])
 
             return loss_identity, loss_content, loss_distance
 
@@ -159,13 +159,14 @@ class switchable_decoder(nn.Module):
 
     def forward(self, x, d):
 
+        [x1, x2, x3, x4, x5] = x
         shared_code = self.shared_code(d)
 
-        x = self.l51(x, shared_code)
-        x = self.l6(x, shared_code)
-        x = self.l7(x, shared_code)
-        x = self.l8(x, shared_code)
-        x = self.l9(x, shared_code)
+        x = self.l51(x5, shared_code)
+        x = self.l6(x, x4,shared_code)
+        x = self.l7(x, x3, shared_code)
+        x = self.l8(x, x2, shared_code)
+        x = self.l9(x, x1, shared_code)
 
         x = self.conv_out(x)
 
@@ -182,15 +183,20 @@ class switchable_encoder(nn.Module):
         self.l3 = down_conv(c_list[1], c_list[2])
         self.l4 = down_conv(c_list[2], c_list[3])
         self.l50 = one_conv(c_list[3], c_list[4])
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
     def forward(self, x):
-        x = self.l1(x)
-        x = self.l2(x)
-        x = self.l3(x)
-        x = self.l4(x)
-        x = self.l50(x)
+        x1 = self.l1(x)
+        x1_pool = self.pool(x1)
+        x2 = self.l2(x1_pool)
+        x2_pool = self.pool(x2)
+        x3 = self.l3(x2_pool)
+        x3_pool = self.pool(x3)
+        x4 = self.l4(x3_pool)
+        x4_pool = self.pool(x4)
+        x5 = self.l50(x4_pool)
 
-        return x
+        return [x1, x2, x3, x4, x5]
 
 class one_conv(nn.Module):
     def __init__(self, in_ch, out_ch):
@@ -210,24 +216,23 @@ class down_conv(nn.Module):
 
         self.conv1 = one_conv(in_ch, out_ch)
         self.conv2 = one_conv(out_ch, out_ch)
-        self.down_sample = nn.MaxPool2d(kernel_size=2, stride=2)
 
     def forward(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
-        x = self.down_sample(x)
 
         return x
 
 class up_conv(nn.Module):
     def __init__(self, args, in_ch, out_ch):
         super(up_conv, self).__init__()
-        self.up = nn.ConvTranspose2d(in_channels=in_ch, out_channels=in_ch, kernel_size=2, stride=2)
+        self.up = nn.ConvTranspose2d(in_channels=in_ch, out_channels=in_ch//2, kernel_size=2, stride=2)
         self.conv1 = one_conv(in_ch, out_ch)
         self.conv2 = one_conv_adain(args, out_ch, out_ch)
 
-    def forward(self, x, shared_code_dec):
-        x = self.up(x)
+    def forward(self, x1, x2, shared_code_dec):
+        x1 = self.up(x1)
+        x = torch.cat([x1, x2], dim=1)
         x = self.conv1(x)
         x = self.conv2(x, shared_code_dec)
         return x

@@ -6,14 +6,12 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn.functional as F
 
-from model.switchable_autoencoder import switchable_autoencoder
+from model.switchable_unet import switchable_autoencoder
 from model.Forward_model import Holo_Generator
 from functions.data_loader import Holo_Recon_Dataloader
 from functions.pretrain_argument import parse_args
 from functions.functions import *
-
-
-# matplotlib.use('Agg')
+matplotlib.use('Agg')
 
 if __name__ == '__main__':
 
@@ -23,7 +21,7 @@ if __name__ == '__main__':
 
     data_name_holo = args.data_name_holo
     device = args.device
-    args.save_folder = data_name_holo + '_pre_train_wo_skip'
+    args.save_folder = data_name_holo + '_' + args.save_name
 
     args.project_path = os.path.join(args.model_root, args.project)
     make_path(args.project_path)
@@ -48,7 +46,6 @@ if __name__ == '__main__':
 
     # define model
     model = switchable_autoencoder(args).to(device)
-    # propagator = Holo_Generator(args).to(device)
 
     op = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
 
