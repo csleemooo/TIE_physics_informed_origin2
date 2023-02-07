@@ -1,8 +1,8 @@
 import torch
 from torch import autograd
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def calc_gradient_penalty(netD, real_data, fake_data, BATCH_SIZE):
+def calc_gradient_penalty(netD, real_data, fake_data, BATCH_SIZE, device):
 
     alpha = torch.rand(BATCH_SIZE, 1, 1, 1)  # alpha is random number sampled from uniform distribution
     alpha = alpha.expand(real_data.size())

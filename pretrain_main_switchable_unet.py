@@ -92,7 +92,7 @@ if __name__ == '__main__':
             real_D = model_disc(diff_intensity)
 
             D_penalty_loss = args.penalty_regularizer * calc_gradient_penalty(model_disc, diff_intensity, diff_intensity_trans,
-                                                                              real_D.shape[0])
+                                                                              real_D.shape[0], device)
             D_adversarial_loss = criterion_wgan(fake_D.mean(dim=(-2, -1))) - criterion_wgan(real_D.mean(dim=(-2, -1)))
 
             D_loss = D_adversarial_loss + D_penalty_loss
