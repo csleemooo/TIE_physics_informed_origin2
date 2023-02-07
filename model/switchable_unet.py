@@ -2,6 +2,48 @@ import torch
 from torch import nn
 from model.AdaIN import AdaIN
 
+class Discriminator(nn.Module):
+    def __init__(self, args, input_channel=1):
+        super(Discriminator, self).__init__()
+        self.input_channel = input_channel
+        self.output_channel = 1   # check ?!
+        self.use_norm = True
+        self.lrelu_use = args.lrelu_use
+        self.batch_mode='B'
+
+        # c1 = args.initial_channel
+        c1 = args.initial_channel
+        c2 = c1*2
+        c3 = c2*2
+        c4 = c3*2
+
+        self.l10 = CBR(in_channel=self.input_channel, out_channel=c1, use_norm=False, kernel=4, padding=0,
+                       stride=2, lrelu_use=self.lrelu_use)
+
+        self.l20 = CBR(in_channel=c1, out_channel=c2, use_norm=self.use_norm, kernel=4, padding=0, stride=2,
+                       lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.l30 = CBR(in_channel=c2, out_channel=c3, use_norm=self.use_norm, kernel=4, padding=0, stride=2,
+                       lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.l40 = CBR(in_channel=c3, out_channel=c4, use_norm=self.use_norm, kernel=4, padding=0, stride=1,
+                       lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+
+        self.conv_out = nn.Conv2d(in_channels=c4, out_channels=self.output_channel, kernel_size=(1, 1), stride=(1, 1))
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+
+        self.apply(weights_initialize_normal)
+
+    def forward(self, x):
+
+        x = self.l10(x)
+        x = self.l20(x)
+        x = self.l30(x)
+        x = self.l40(x)
+
+        out = self.conv_out(self.avg_pool(x))
+        return out
+
+
+
 class Distance_Generator(nn.Module):
 
     def __init__(self, args):
@@ -133,10 +175,9 @@ class switchable_autoencoder(nn.Module):
 
         if train:
             loss_distance = self.mse_loss(d_pred_x, d_x) + self.mse_loss(d_pred_t, d_t)
-            loss_identity = self.l1_loss(decoded_x, x)
             loss_content = self.mse_loss(encoded_t[-1], encoded[-1])
 
-            return loss_identity, loss_content, loss_distance
+            return loss_content, loss_distance,  decoded_t
 
         else:
             return decoded_x, decoded_t, d_pred_x, d_pred_t
@@ -151,8 +192,8 @@ class switchable_decoder(nn.Module):
         self.l51 = one_conv_adain(args, c_list[4], c_list[4])
         self.l6 = up_conv(args, c_list[4], c_list[3])
         self.l7 = up_conv(args, c_list[3], c_list[2])
-        self.l8 = up_conv(args, c_list[2], c_list[1])
-        self.l9 = up_conv(args, c_list[1], c_list[0])
+        self.l8 = up_conv(args, c_list[2], c_list[1], skip=False)
+        self.l9 = up_conv(args, c_list[1], c_list[0], skip=False)
         self.conv_out = nn.Conv2d(c_list[0], 1, kernel_size=1, padding=0)
 
         self.shared_code = code_generator_shared(args)
@@ -163,10 +204,10 @@ class switchable_decoder(nn.Module):
         shared_code = self.shared_code(d)
 
         x = self.l51(x5, shared_code)
-        x = self.l6(x, x4,shared_code)
+        x = self.l6(x, x4, shared_code)
         x = self.l7(x, x3, shared_code)
-        x = self.l8(x, x2, shared_code)
-        x = self.l9(x, x1, shared_code)
+        x = self.l8(x, None, shared_code)
+        x = self.l9(x, None, shared_code)
 
         x = self.conv_out(x)
 
@@ -224,15 +265,23 @@ class down_conv(nn.Module):
         return x
 
 class up_conv(nn.Module):
-    def __init__(self, args, in_ch, out_ch):
+    def __init__(self, args, in_ch, out_ch, skip=True):
         super(up_conv, self).__init__()
-        self.up = nn.ConvTranspose2d(in_channels=in_ch, out_channels=in_ch//2, kernel_size=2, stride=2)
+        self.skip=skip
+        if skip:
+            self.up = nn.ConvTranspose2d(in_channels=in_ch, out_channels=in_ch//2, kernel_size=2, stride=2)
+        else:
+            self.up = nn.ConvTranspose2d(in_channels=in_ch, out_channels=in_ch, kernel_size=2, stride=2)
         self.conv1 = one_conv(in_ch, out_ch)
         self.conv2 = one_conv_adain(args, out_ch, out_ch)
 
+
     def forward(self, x1, x2, shared_code_dec):
-        x1 = self.up(x1)
-        x = torch.cat([x1, x2], dim=1)
+        if self.skip:
+            x1 = self.up(x1)
+            x = torch.cat([x1, x2], dim=1)
+        else:
+            x = self.up(x1)
         x = self.conv1(x)
         x = self.conv2(x, shared_code_dec)
         return x
