@@ -135,6 +135,7 @@ if __name__ == '__main__':
             loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum, loss_disc_penalty_sum \
                 = 0, 0, 0, 0, 0, 0
             lr_scheduler.step()
+            lr_scheduler_disc.step()
 
             if (epo+1)%args.model_save_iter==0:
 

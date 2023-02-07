@@ -21,15 +21,15 @@ def parse_args():
 
 
     # hyper-parameter
-    parser.add_argument("--batch_size", default=8, type=int)
+    parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--crop_size", default=256, type=int)
     parser.add_argument("--epochs", default=150, type=int)
-    parser.add_argument("--chk_iter", default=45, type=int)
-    parser.add_argument("--visualize_chk_iter", default=5, type=int)
+    parser.add_argument("--chk_iter", default=100, type=int)
+    parser.add_argument("--visualize_chk_iter", default=1, type=int)
     parser.add_argument("--model_save_iter", default=20, type=int)
     parser.add_argument("--lr", default=1e-4, type=float)  # 1e-4 is default
     parser.add_argument("--lr_decay_epoch", default=5, type=int)
-    parser.add_argument("--lr_decay_rate", default=0.9, type=float)
+    parser.add_argument("--lr_decay_rate", default=0.95, type=float)
     parser.add_argument("--beta1", default=0.5, type=float)
     parser.add_argument("--beta2", default=0.99, type=float)
     parser.add_argument("--w_content", default=100.0, type=float)

@@ -175,7 +175,7 @@ class switchable_autoencoder(nn.Module):
 
         if train:
             loss_distance = self.mse_loss(d_pred_x, d_x) + self.mse_loss(d_pred_t, d_t)
-            loss_content = self.mse_loss(encoded_t[-1], encoded[-1])
+            loss_content = torch.mean(torch.Tensor([self.mse_loss(encoded_t[i], encoded[i]) for i in range(len(encoded))]))
 
             return loss_content, loss_distance,  decoded_t
 
@@ -190,8 +190,8 @@ class switchable_decoder(nn.Module):
         c_list = [args.initial_channel * (2 ** i) for i in range(5)]
 
         self.l51 = one_conv_adain(args, c_list[4], c_list[4])
-        self.l6 = up_conv(args, c_list[4], c_list[3])
-        self.l7 = up_conv(args, c_list[3], c_list[2])
+        self.l6 = up_conv(args, c_list[4], c_list[3], skip=False)
+        self.l7 = up_conv(args, c_list[3], c_list[2], skip=False)
         self.l8 = up_conv(args, c_list[2], c_list[1], skip=False)
         self.l9 = up_conv(args, c_list[1], c_list[0], skip=False)
         self.conv_out = nn.Conv2d(c_list[0], 1, kernel_size=1, padding=0)
@@ -206,8 +206,8 @@ class switchable_decoder(nn.Module):
         x = self.l51(x5, shared_code)
         x = self.l6(x, x4, shared_code)
         x = self.l7(x, x3, shared_code)  # x3 or none
-        x = self.l8(x, None, shared_code)  # x2 or none
-        x = self.l9(x, None, shared_code)  # x1 or none
+        x = self.l8(x, x2, shared_code)  # x2 or none
+        x = self.l9(x, x1, shared_code)  # x1 or none
 
         x = self.conv_out(x)
 
