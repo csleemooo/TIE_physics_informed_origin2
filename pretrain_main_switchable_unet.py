@@ -57,17 +57,14 @@ if __name__ == '__main__':
     lr_scheduler_disc = torch.optim.lr_scheduler.StepLR(op_disc, step_size=args.lr_decay_epoch, gamma=args.lr_decay_rate)
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=args.epochs, eta_min=0)
 
-    label_real = torch.full((args.batch_size, 1, 1, 1), 1.0, device=device).float()
-    label_fake = torch.full((args.batch_size, 1, 1, 1), 0.0, device=device).float()
-
     # target data
     loss_list = {'loss_sum_total': []}
     criterion = torch.nn.MSELoss().to(device)
     criterion_wgan = torch.mean
 
     N_train = len(train_holo_loader)
-    loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum, loss_disc_penalty_sum \
-        = 0, 0, 0, 0, 0, 0
+    loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum, loss_disc_penalty_sum, loss_identity_sum \
+        = 0, 0, 0, 0, 0, 0, 0
     loss_sum_list=[]
 
     transform_simple = transforms.Compose([transforms.RandomHorizontalFlip(),
@@ -87,7 +84,7 @@ if __name__ == '__main__':
             d_true = -args.distance_normalize_constant + d_true.view(-1, 1).to(device).float()/args.distance_normalize
             d_trans = torch.randint(low=0, high=17, size = [d_true.shape[0], 1]).to(device).float()/16
 
-            loss_content, loss_distance, diff_intensity_trans = model(diff_intensity, d_true, d_trans)
+            loss_content, loss_distance, loss_identity, diff_intensity_trans = model(diff_intensity, d_true, d_trans)
 
             # train discriminator
             op_disc.zero_grad()
@@ -110,8 +107,9 @@ if __name__ == '__main__':
             op.zero_grad()
             loss_gen = -1*criterion_wgan(model_disc(diff_intensity_trans).mean(dim=(-2, -1)))
 
-            loss_sum = args.w_content*loss_content+args.w_distance*loss_distance + args.w_gen*loss_gen
+            loss_sum = args.w_content*loss_content+args.w_distance*loss_distance + args.w_gen*loss_gen + args.w_identity*loss_identity
 
+            loss_identity_sum += args.w_identity*loss_identity
             loss_content_sum += args.w_content*loss_content.item()
             loss_distance_sum += args.w_distance*loss_distance.item()
             loss_gen_sum += args.w_gen*loss_gen.item()
@@ -125,15 +123,15 @@ if __name__ == '__main__':
             loss_sum_list.append(loss_sum.item())
 
             if (batch+1)%args.chk_iter == 0:
-                print('[Epoch: %d] Total loss: %1.6f, Generator loss: %1.4f, Discriminator loss: %1.4f, penalty loss: %1.4f, content loss: %1.4f, distance loss: %1.4f'
+                print('[Epoch: %d] Total loss: %1.6f, G loss: %1.4f, D loss: %1.4f, Dp loss: %1.4f, content loss: %1.4f, distance loss: %1.4f, identity loss: %1.4f'
                       %(epo+1, loss_sum_total/args.chk_iter, loss_gen_sum/args.chk_iter, loss_disc_sum/args.chk_iter,loss_disc_penalty_sum/args.chk_iter,
-                        loss_content_sum/args.chk_iter, loss_distance_sum/args.chk_iter))
-                loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum, loss_disc_penalty_sum \
-                    = 0, 0, 0, 0, 0, 0
+                        loss_content_sum/args.chk_iter, loss_distance_sum/args.chk_iter, loss_identity_sum/args.chk_iter))
+                loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum, loss_disc_penalty_sum, loss_identity_sum \
+                    = 0, 0, 0, 0, 0, 0, 0
 
         else:
-            loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum, loss_disc_penalty_sum \
-                = 0, 0, 0, 0, 0, 0
+            loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum, loss_disc_penalty_sum, loss_identity_sum \
+                = 0, 0, 0, 0, 0, 0, 0
             lr_scheduler.step()
             lr_scheduler_disc.step()
 

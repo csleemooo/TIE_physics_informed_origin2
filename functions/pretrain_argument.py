@@ -21,7 +21,7 @@ def parse_args():
 
 
     # hyper-parameter
-    parser.add_argument("--batch_size", default=16, type=int)
+    parser.add_argument("--batch_size", default=4, type=int)
     parser.add_argument("--crop_size", default=256, type=int)
     parser.add_argument("--epochs", default=150, type=int)
     parser.add_argument("--chk_iter", default=100, type=int)
@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument("--lr_decay_rate", default=0.95, type=float)
     parser.add_argument("--beta1", default=0.5, type=float)
     parser.add_argument("--beta2", default=0.99, type=float)
-    parser.add_argument("--w_content", default=100.0, type=float)
+    parser.add_argument("--w_content", default=10.0, type=float)
     parser.add_argument("--w_identity", default=10.0, type=float)
     parser.add_argument("--w_distance", default=10.0, type=float)
     parser.add_argument("--penalty_regularizer", default=10.0, type=float)

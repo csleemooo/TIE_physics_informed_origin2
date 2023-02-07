@@ -105,20 +105,25 @@ class Distance_Generator(nn.Module):
         out_d = self.global_avg_pool(l5)
         out_d = self.conv_out_d(out_d)
 
-        return torch.sigmoid(out_d.view(-1, 1))
+        return out_d.view(-1, 1)
 
 class code_generator_shared(nn.Module):
     def __init__(self, args):
         super(code_generator_shared, self).__init__()
 
         c1 = args.initial_channel
-        c3 = args.initial_channel*8
+        # c3 = args.initial_channel*4
         c5 = args.initial_channel*16
-        self.code_G = nn.Sequential(nn.Linear(1, c1),
-                                    nn.Linear(c1, c1),
-                                    nn.Linear(c1, c3),
-                                    nn.Linear(c3, c3),
-                                    nn.Linear(c3, c5),
+        self.code_G = nn.Sequential(nn.Linear(1, c5),
+                                    nn.ReLU(),
+                                    nn.Linear(c5, c5),
+                                    nn.ReLU(),
+                                    nn.Linear(c5, c5),
+                                    nn.ReLU(),
+                                    nn.Linear(c5, c5),
+                                    nn.ReLU(),
+                                    nn.Linear(c5, c5),
+                                    nn.ReLU(),
                                     nn.Linear(c5, c5))
 
     def forward(self, x):
@@ -154,6 +159,7 @@ class switchable_autoencoder(nn.Module):
     def __init__(self, args):
         super(switchable_autoencoder, self).__init__()
 
+        self.adain = AdaIN()
         self.encoder = switchable_encoder(args)
         self.decoder = switchable_decoder(args)
         self.distance_generator = Distance_Generator(args)
@@ -161,9 +167,16 @@ class switchable_autoencoder(nn.Module):
         self.mse_loss = nn.MSELoss()
         self.l1_loss = nn.L1Loss()
 
+        self.apply(weights_initialize_normal)
+
     def forward(self, x, d_x, d_t, train=True):
 
         encoded = self.encoder(x)
+        # size = encoded[-1].size()
+
+        # x_m, x_s = self.adain.calc_mean_std(encoded[-1])
+        # encoded[-1] = (encoded[-1] - x_m.expand(
+        #     size)) / x_s.expand(size)  # normalize feature
 
         decoded_x = self.decoder(encoded, d_x)  # D(f, d)
         decoded_t = self.decoder(encoded, d_t)
@@ -175,9 +188,15 @@ class switchable_autoencoder(nn.Module):
 
         if train:
             loss_distance = self.mse_loss(d_pred_x, d_x) + self.mse_loss(d_pred_t, d_t)
-            loss_content = torch.mean(torch.Tensor([self.mse_loss(encoded_t[i], encoded[i]) for i in range(len(encoded))]))
 
-            return loss_content, loss_distance,  decoded_t
+            # t_m, t_s = self.adain.calc_mean_std(encoded_t[-1])
+            # encoded_t[-1] = (encoded_t[-1] - t_m.expand(
+            # size)) / t_s.expand(size)  # normalize feature
+
+            loss_content = self.mse_loss(encoded_t[-1], encoded[-1])
+            loss_identity = self.l1_loss(decoded_x, x)
+
+            return loss_content, loss_distance,  loss_identity, decoded_t
 
         else:
             return decoded_x, decoded_t, d_pred_x, d_pred_t
