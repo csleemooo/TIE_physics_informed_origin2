@@ -50,7 +50,7 @@ if __name__ == '__main__':
     model_disc =  Discriminator(args).to(device)
 
     op = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
-    op_disc = torch.optim.Adam(model_disc.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
+    op_disc = torch.optim.Adam(model_disc.parameters(), lr=args.lr*1e-1, betas=(args.beta1, args.beta2))
 
     # scheduler
     lr_scheduler = torch.optim.lr_scheduler.StepLR(op, step_size=args.lr_decay_epoch, gamma=args.lr_decay_rate)
@@ -93,6 +93,8 @@ if __name__ == '__main__':
 
             loss_disc = criterion(fake, label_fake) + criterion(real, label_real)
             loss_disc_sum += loss_disc.item()
+
+            loss_disc.backward()
             op_disc.step()
 
             op.zero_grad()
