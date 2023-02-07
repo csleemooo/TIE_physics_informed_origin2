@@ -35,6 +35,7 @@ def parse_args():
     parser.add_argument("--w_content", default=100.0, type=float)
     parser.add_argument("--w_identity", default=10.0, type=float)
     parser.add_argument("--w_distance", default=10.0, type=float)
+    parser.add_argument("--penalty_regularizer", default=10.0, type=float)
     parser.add_argument("--w_gen", default=1.0, type=float)
     parser.add_argument("--distance_min", default=-200e-6, type=float)
     parser.add_argument("--distance_max", default=200e-6, type=float)

@@ -7,7 +7,7 @@ from tqdm import tqdm
 import torch.nn.functional as F
 
 from model.switchable_unet import switchable_autoencoder, Discriminator
-from model.Forward_model import Holo_Generator
+from functions.gradient_penalty import calc_gradient_penalty
 from functions.data_loader import Holo_Recon_Dataloader
 from functions.pretrain_argument import parse_args
 from functions.functions import *
@@ -63,9 +63,11 @@ if __name__ == '__main__':
     # target data
     loss_list = {'loss_sum_total': []}
     criterion = torch.nn.MSELoss().to(device)
+    criterion_wgan = torch.mean
 
     N_train = len(train_holo_loader)
-    loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum = 0, 0, 0, 0, 0
+    loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum, loss_disc_penalty_sum \
+        = 0, 0, 0, 0, 0, 0
     loss_sum_list=[]
 
     transform_simple = transforms.Compose([transforms.RandomHorizontalFlip(),
@@ -87,18 +89,26 @@ if __name__ == '__main__':
 
             loss_content, loss_distance, diff_intensity_trans = model(diff_intensity, d_true, d_trans)
 
+            # train discriminator
             op_disc.zero_grad()
-            fake = model_disc(diff_intensity_trans.detach())
-            real = model_disc(diff_intensity)
+            fake_D = model_disc(diff_intensity_trans.detach())
+            real_D = model_disc(diff_intensity)
 
-            loss_disc = criterion(fake, label_fake) + criterion(real, label_real)
-            loss_disc_sum += loss_disc.item()
+            D_penalty_loss = args.penalty_regularizer * calc_gradient_penalty(model_disc, diff_intensity, diff_intensity_trans,
+                                                                              real_D.shape[0])
+            D_adversarial_loss = criterion_wgan(fake_D.mean(dim=(-2, -1))) - criterion_wgan(real_D.mean(dim=(-2, -1)))
 
-            loss_disc.backward()
+            D_loss = D_adversarial_loss + D_penalty_loss
+
+            loss_disc_sum += D_adversarial_loss.item()
+            loss_disc_penalty_sum += D_penalty_loss.item()
+
+            D_loss.backward()
             op_disc.step()
 
+            # train generator
             op.zero_grad()
-            loss_gen = criterion(model_disc(diff_intensity_trans.detach()), label_real)
+            loss_gen = -1*criterion_wgan(model_disc(diff_intensity_trans).mean(dim=(-2, -1)))
 
             loss_sum = args.w_content*loss_content+args.w_distance*loss_distance + args.w_gen*loss_gen
 
@@ -115,13 +125,15 @@ if __name__ == '__main__':
             loss_sum_list.append(loss_sum.item())
 
             if (batch+1)%args.chk_iter == 0:
-                print('[Epoch: %d] Total loss: %1.6f, Generator loss: %1.4f, Discriminator loss: %1.4f, content loss: %1.4f, distance loss: %1.4f'
-                      %(epo+1, loss_sum_total/args.chk_iter, loss_gen_sum/args.chk_iter, loss_disc_sum/args.chk_iter,
+                print('[Epoch: %d] Total loss: %1.6f, Generator loss: %1.4f, Discriminator loss: %1.4f, penalty loss: %1.4f, content loss: %1.4f, distance loss: %1.4f'
+                      %(epo+1, loss_sum_total/args.chk_iter, loss_gen_sum/args.chk_iter, loss_disc_sum/args.chk_iter,loss_disc_penalty_sum/args.chk_iter,
                         loss_content_sum/args.chk_iter, loss_distance_sum/args.chk_iter))
-                loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum = 0, 0, 0, 0, 0
+                loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum, loss_disc_penalty_sum \
+                    = 0, 0, 0, 0, 0, 0
 
         else:
-            loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum = 0, 0, 0, 0, 0
+            loss_sum_total, loss_gen_sum, loss_content_sum, loss_distance_sum, loss_disc_sum, loss_disc_penalty_sum \
+                = 0, 0, 0, 0, 0, 0
             lr_scheduler.step()
 
             if (epo+1)%args.model_save_iter==0:

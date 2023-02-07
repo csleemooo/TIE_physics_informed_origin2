@@ -192,8 +192,8 @@ class switchable_decoder(nn.Module):
         self.l51 = one_conv_adain(args, c_list[4], c_list[4])
         self.l6 = up_conv(args, c_list[4], c_list[3])
         self.l7 = up_conv(args, c_list[3], c_list[2])
-        self.l8 = up_conv(args, c_list[2], c_list[1])
-        self.l9 = up_conv(args, c_list[1], c_list[0])
+        self.l8 = up_conv(args, c_list[2], c_list[1], skip=False)
+        self.l9 = up_conv(args, c_list[1], c_list[0], skip=False)
         self.conv_out = nn.Conv2d(c_list[0], 1, kernel_size=1, padding=0)
 
         self.shared_code = code_generator_shared(args)
@@ -206,8 +206,8 @@ class switchable_decoder(nn.Module):
         x = self.l51(x5, shared_code)
         x = self.l6(x, x4, shared_code)
         x = self.l7(x, x3, shared_code)  # x3 or none
-        x = self.l8(x, x2, shared_code)  # x2 or none
-        x = self.l9(x, x1, shared_code)  # x1 or none
+        x = self.l8(x, None, shared_code)  # x2 or none
+        x = self.l9(x, None, shared_code)  # x1 or none
 
         x = self.conv_out(x)
 
