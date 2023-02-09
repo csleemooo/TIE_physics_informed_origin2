@@ -21,7 +21,7 @@ def parse_args():
 
 
     # hyper-parameter
-    parser.add_argument("--batch_size", default=16, type=int)
+    parser.add_argument("--batch_size", default=8, type=int)
     parser.add_argument("--crop_size", default=256, type=int)
     parser.add_argument("--epochs", default=150, type=int)
     parser.add_argument("--chk_iter", default=100, type=int)

@@ -1,6 +1,45 @@
 import torch
 from torch import nn
 from model.AdaIN import AdaIN
+class Discriminator(nn.Module):
+    def __init__(self, args, input_channel=1):
+        super(Discriminator, self).__init__()
+        self.input_channel = input_channel
+        self.output_channel = 1   # check ?!
+        self.use_norm = True
+        self.lrelu_use = args.lrelu_use
+        self.batch_mode='B'
+
+        # c1 = args.initial_channel
+        c1 = args.initial_channel
+        c2 = c1*2
+        c3 = c2*2
+        c4 = c3*2
+
+        self.l10 = CBR(in_channel=self.input_channel, out_channel=c1, use_norm=False, kernel=4, padding=0,
+                       stride=2, lrelu_use=self.lrelu_use)
+
+        self.l20 = CBR(in_channel=c1, out_channel=c2, use_norm=self.use_norm, kernel=4, padding=0, stride=2,
+                       lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.l30 = CBR(in_channel=c2, out_channel=c3, use_norm=self.use_norm, kernel=4, padding=0, stride=2,
+                       lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.l40 = CBR(in_channel=c3, out_channel=c4, use_norm=self.use_norm, kernel=4, padding=0, stride=1,
+                       lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+
+        self.conv_out = nn.Conv2d(in_channels=c4, out_channels=self.output_channel, kernel_size=(1, 1), stride=(1, 1))
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+
+        self.apply(weights_initialize_normal)
+
+    def forward(self, x):
+
+        x = self.l10(x)
+        x = self.l20(x)
+        x = self.l30(x)
+        x = self.l40(x)
+
+        out = self.conv_out(self.avg_pool(x)).view(-1, 1)
+        return out
 
 class Distance_Generator(nn.Module):
 
@@ -174,6 +213,14 @@ class autoencoder(nn.Module):
 
         return x
 
+    def forward_IN(self, x):
+        N,C,h,w = x.shape
+        x_mean, x_var = self.adain.calc_mean_std(x)
+
+        x = (x - x_mean.expand(N, C, h, w)) / x_var.expand(N, C, h, w)
+        return x
+
+
     def forward_decoder(self, x, skip, distance_code):
 
         l5 = self.conv_T5(self.l51(self.forward_code_g(x, distance_code, self.l5_code_gm, self.l5_code_gs)))
@@ -241,6 +288,7 @@ class autoencoder(nn.Module):
             loss_distance = self.mse_loss(distance, d_true) + self.mse_loss(distance_trans, d_trans)
 
             return loss_identity, loss_distance, out_holo_identity, out_holo_trans
+
         else:
             return out_holo_identity, distance, out_holo_trans, distance_trans
 
@@ -263,7 +311,7 @@ class CBR(nn.Module):
             if batch_mode == 'I':
                 self.Batch = nn.InstanceNorm2d(self.out_channel)
             elif batch_mode == 'G':
-                self.Batch = nn.GroupNorm(self.out_channel//16, self.out_channel)
+                self.Batch = nn.GroupNorm(self.out_channel//16, self.ou555t_channel)
             else:
                 self.Batch = nn.BatchNorm2d(self.out_channel)
 

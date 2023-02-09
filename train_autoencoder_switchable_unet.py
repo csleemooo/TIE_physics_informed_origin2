@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn.functional as F
 
-from model.autoencoder import autoencoder
+from model.autoencoder import autoencoder, Discriminator
 from model.Forward_model import Holo_Generator
 from functions.data_loader import Holo_Recon_Dataloader
 from functions.pretrain_argument import parse_args
@@ -51,6 +51,7 @@ if __name__ == '__main__':
     pretrain_distance_params = {i:j for i, j in pretrain_distance_params.items() if 'distance' in i}
 
     model = autoencoder(args).to(device)
+    model_disc = Discriminator(args).to(device)
 
     import copy
     for name, param in model.named_parameters():
@@ -63,17 +64,21 @@ if __name__ == '__main__':
     propagator = Holo_Generator(args).to(device)
 
     op = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
+    op_disc = torch.optim.Adam(model_disc.parameters(), lr=args.lr*1e-1, betas=(args.beta1, args.beta2))
 
     # scheduler
     lr_scheduler = torch.optim.lr_scheduler.StepLR(op, step_size=args.lr_decay_epoch, gamma=args.lr_decay_rate)
+    lr_scheduler_disc = torch.optim.lr_scheduler.StepLR(op_disc, step_size=args.lr_decay_epoch, gamma=args.lr_decay_rate)
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=args.epochs, eta_min=0)
 
     # target data
+    label_real = torch.full((args.batch_size, 1, 1, 1), 1, device=device).float()
+    label_fake = torch.full((args.batch_size, 1, 1, 1), 0, device=device).float()
     loss_list = {'loss_sum_total': []}
     criterion = torch.nn.MSELoss().to(device)
 
     N_train = len(train_holo_loader)
-    loss_sum_total, identity_loss_sum, distance_loss_sum = 0, 0, 0
+    loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum = 0, 0, 0,0,0
     loss_sum_list=[]
 
     transform_simple = transforms.Compose([transforms.RandomHorizontalFlip(),
@@ -84,6 +89,7 @@ if __name__ == '__main__':
         data_loader = iter(train_holo_loader)
         for batch in tqdm(range(N_train), desc='Iterations'):
 
+            model_disc.train()
             model.train()
             # model.distance_G.eval()
             # diff_intensity = torch.sqrt(next(data_loader))
@@ -95,10 +101,25 @@ if __name__ == '__main__':
 
             loss_identity, loss_distance, out_holo_identity, out_holo_trans= model(diff_intensity, d_true, d_trans)
 
+            op_disc.zero_grad()
+
+            fake_D = model_disc(out_holo_trans.detach())
+            real_D = model_disc(diff_intensity)
+
+            loss_disc = criterion(fake_D, label_fake) + criterion(real_D, label_real)
+
+            disc_loss_sum += loss_disc.item()
+            loss_disc.backward()
+            op_disc.step()
+
+
             op.zero_grad()
 
-            loss_sum = args.w_identity*loss_identity + args.w_distance*loss_distance
+            gen_loss = criterion(model_disc(out_holo_trans), label_real)
 
+            loss_sum = args.w_identity*loss_identity + args.w_distance*loss_distance + gen_loss
+
+            gen_loss_sum += gen_loss.item()
             identity_loss_sum += args.w_identity*loss_identity.item()
             distance_loss_sum += args.w_distance*loss_distance.item()
             loss_sum_total += args.w_identity*loss_identity.item() + args.w_distance*loss_distance.item()
@@ -109,12 +130,13 @@ if __name__ == '__main__':
             loss_sum_list.append(loss_sum.item())
 
             if (batch+1)%args.chk_iter == 0:
-                print('[Epoch: %d] Total loss: %1.6f, Identity loss: %1.4f, Distance loss: %1.4f'
-                      %(epo+1, loss_sum_total/args.chk_iter, identity_loss_sum/args.chk_iter, distance_loss_sum/args.chk_iter))
-                loss_sum_total, identity_loss_sum, distance_loss_sum = 0, 0, 0
+                print('[Epoch: %d] Total loss: %1.6f, Identity loss: %1.4f, Distance loss: %1.4f, Discriminator loss: %1.4f, Generator loss: %1.4f'
+                      %(epo+1, loss_sum_total/args.chk_iter, identity_loss_sum/args.chk_iter, distance_loss_sum/args.chk_iter,
+                        disc_loss_sum/args.chk_iter, gen_loss_sum/args.chk_iter))
+                loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum = 0, 0, 0, 0, 0
 
         else:
-            loss_sum_total, identity_loss_sum, distance_loss_sum = 0, 0, 0
+            loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum = 0, 0, 0, 0, 0
             lr_scheduler.step()
 
             if (epo+1)%args.model_save_iter==0:
