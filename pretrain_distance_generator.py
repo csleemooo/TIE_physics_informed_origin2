@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn.functional as F
 
-from model.autoencoder import autoencoder
+from model.autoencoder import autoencoder, Distance_Generator
 from model.Forward_model import Holo_Generator
 from functions.data_loader import Holo_Recon_Dataloader
 from functions.pretrain_argument import parse_args
@@ -22,7 +22,6 @@ if __name__ == '__main__':
     args.distance_normalize_constant = args.distance_min / args.distance_normalize
 
     data_name_holo = "tie_bead_training_data"
-    args.save_name = 'switchable_unet'
     args.save_folder = data_name_holo + '_' + args.save_name
 
     args.project_path = os.path.join(args.model_root, args.project)
@@ -47,20 +46,7 @@ if __name__ == '__main__':
     N_test = test_holo_loader.__len__()
 
     # define model
-    pretrain_distance_params = torch.load(os.path.join(args.model_root, args.project, 'tie_bead_training_pretrain_distance_generator', 'model.pth'))['model_state_dict']
-    pretrain_distance_params = {i:j for i, j in pretrain_distance_params.items() if 'distance' in i}
-
-    model = autoencoder(args).to(device)
-
-    import copy
-    for name, param in model.named_parameters():
-        if name in pretrain_distance_params.keys():
-            param.data = copy.copy(pretrain_distance_params[name])
-            param.requires_grad = False
-
-    model.distance_G.requires_grad_(False)
-
-    propagator = Holo_Generator(args).to(device)
+    model = Distance_Generator(args).to(device)
 
     op = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
 
@@ -85,23 +71,18 @@ if __name__ == '__main__':
         for batch in tqdm(range(N_train), desc='Iterations'):
 
             model.train()
-            # model.distance_G.eval()
-            # diff_intensity = torch.sqrt(next(data_loader))
             diff_intensity, d_true = next(data_loader)
 
             diff_intensity = diff_intensity.to(device).float()
             d_true = -args.distance_normalize_constant + d_true.view(-1, 1).to(device).float()/args.distance_normalize
-            d_trans = torch.randint(low=0, high=17, size=[d_true.shape[0], 1]).to(device).float()/16
 
-            loss_identity, loss_distance, out_holo_identity, out_holo_trans= model(diff_intensity, d_true, d_trans)
+            d_pred = model(diff_intensity)
 
             op.zero_grad()
 
-            loss_sum = args.w_identity*loss_identity + args.w_distance*loss_distance
+            loss_sum = criterion(d_pred, d_true)
 
-            identity_loss_sum += args.w_identity*loss_identity.item()
-            distance_loss_sum += args.w_distance*loss_distance.item()
-            loss_sum_total += args.w_identity*loss_identity.item() + args.w_distance*loss_distance.item()
+            loss_sum_total += loss_sum.item()
 
             loss_sum.backward()
 
@@ -109,12 +90,11 @@ if __name__ == '__main__':
             loss_sum_list.append(loss_sum.item())
 
             if (batch+1)%args.chk_iter == 0:
-                print('[Epoch: %d] Total loss: %1.6f, Identity loss: %1.4f, Distance loss: %1.4f'
-                      %(epo+1, loss_sum_total/args.chk_iter, identity_loss_sum/args.chk_iter, distance_loss_sum/args.chk_iter))
-                loss_sum_total, identity_loss_sum, distance_loss_sum = 0, 0, 0
+                print('[Epoch: %d] Total loss: %1.6f'%(epo+1, loss_sum_total/args.chk_iter))
+                loss_sum_total = 0
 
         else:
-            loss_sum_total, identity_loss_sum, distance_loss_sum = 0, 0, 0
+            loss_sum_total = 0
             lr_scheduler.step()
 
             if (epo+1)%args.model_save_iter==0:
@@ -134,43 +114,26 @@ if __name__ == '__main__':
                 p = os.path.join(args.saving_path, 'generated', 'epo%d' % (epo + 1))
                 make_path(p)
 
+                d_result = [[], []]
                 for b in range(N_test):
                     diff_intensity, d_true = next(data_loader)
 
                     diff_intensity = diff_intensity.to(device).float()
-                    d_true = -args.distance_normalize_constant + d_true.view(-1, 1).to(
+                    d_true = -args.distance_normalize_constant + d_true.view(-1, 1, 1, 1).to(
                         device).float() / args.distance_normalize
-                    d_trans = torch.randint(low=0, high=17, size=[d_true.shape[0], 1]).to(device).float() / 16
+                    d_pred = model(diff_intensity)
 
-                    diff_recon, d_pred, diff_recon_transform, _ = model(diff_intensity, d_true,
-                                                                                            d_trans, train=False)
+                    d_result[0].append(d_true.item())
+                    d_result[1].append(d_pred.item())
+                else:
+                    fig2 = plt.figure(2, figsize=[6, 6])
+                    plt.scatter(d_result[0], d_result[1])
+                    plt.xlabel('True')
+                    plt.ylabel('Predict')
 
-
-                    d_true = (d_true + args.distance_normalize_constant) * args.distance_normalize
-                    d_pred = (d_pred + args.distance_normalize_constant) * args.distance_normalize
-                    d_trans = (d_trans + args.distance_normalize_constant) * args.distance_normalize
-                    diff_recon = diff_recon.cpu().detach().numpy()[0][0]
-                    diff_intensity = diff_intensity.cpu().detach().numpy()[0][0]
-                    diff_recon_transform = diff_recon_transform.cpu().detach().numpy()[0][0]
-
-                    fig2 = plt.figure(2, figsize=[12, 8])
-                    plt.subplot(1, 3, 1)
-                    plt.title('True distance %1.6f' % (d_true.item()))
-                    plt.imshow(diff_intensity, cmap='gray', vmax=1.0, vmin=0)
-                    plt.axis('off')
-                    plt.subplot(1, 3, 2)
-                    plt.title('Pred distance %1.6f' % (d_pred.item()))
-                    plt.imshow(diff_recon, cmap='gray', vmax=1.0, vmin=0)
-                    plt.axis('off')
-                    plt.subplot(1, 3, 3)
-                    plt.title('Trans distance %1.6f' % (d_trans.item()))
-                    plt.imshow(diff_recon_transform, cmap='gray', vmax=1.0, vmin=0)
-                    plt.axis('off')
-                    plt.tight_layout()
-                    fig_save_name = os.path.join(p, 'test_holo_' + str(b + 1) + '.png')
+                    fig_save_name = os.path.join(p, 'test_epoch_%d.png'%(epo+1))
                     fig2.savefig(fig_save_name)
                     plt.close(fig2)
-
 
     else:
         save_data = {'epoch': args.epochs,
