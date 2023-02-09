@@ -10,7 +10,7 @@ def parse_args():
     parser.add_argument("--model_root", default='D:\\', type=str)
     parser.add_argument("--data_root", default='D:\\TIE_physics_informed\\data', type=str)
     parser.add_argument("--data_name_holo", default= "tie_bead_training_data", type=str)
-    parser.add_argument("--save_name", default="", type=str)
+    parser.add_argument("--save_name", default='unet', type=str)
     parser.add_argument("--device", default='cuda', type=str)
     parser.add_argument("--norm_use", default=True, type=bool)
     parser.add_argument("--lrelu_use", default=False, type=bool)
@@ -21,7 +21,7 @@ def parse_args():
 
 
     # hyper-parameter
-    parser.add_argument("--batch_size", default=4, type=int)
+    parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--crop_size", default=256, type=int)
     parser.add_argument("--epochs", default=150, type=int)
     parser.add_argument("--chk_iter", default=100, type=int)

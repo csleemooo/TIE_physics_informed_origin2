@@ -21,7 +21,7 @@ if __name__ == '__main__':
 
     data_name_holo = args.data_name_holo
     device = args.device
-    args.save_name='unet'
+
     args.save_folder = data_name_holo + '_' + args.save_name
 
     args.project_path = os.path.join(args.model_root, args.project)
@@ -47,7 +47,7 @@ if __name__ == '__main__':
 
     # define model
     model = switchable_autoencoder(args).to(device)
-    model_disc =  Discriminator(args).to(device)
+    model_disc = Discriminator(args).to(device)
 
     op = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
     op_disc = torch.optim.Adam(model_disc.parameters(), lr=args.lr*1e-1, betas=(args.beta1, args.beta2))

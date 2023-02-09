@@ -172,11 +172,6 @@ class switchable_autoencoder(nn.Module):
     def forward(self, x, d_x, d_t, train=True):
 
         encoded = self.encoder(x)
-        # size = encoded[-1].size()
-
-        # x_m, x_s = self.adain.calc_mean_std(encoded[-1])
-        # encoded[-1] = (encoded[-1] - x_m.expand(
-        #     size)) / x_s.expand(size)  # normalize feature
 
         decoded_x = self.decoder(encoded, d_x)  # D(f, d)
         decoded_t = self.decoder(encoded, d_t)
@@ -209,8 +204,8 @@ class switchable_decoder(nn.Module):
         c_list = [args.initial_channel * (2 ** i) for i in range(5)]
 
         self.l51 = one_conv_adain(args, c_list[4], c_list[4])
-        self.l6 = up_conv(args, c_list[4], c_list[3], skip=False)
-        self.l7 = up_conv(args, c_list[3], c_list[2], skip=False)
+        self.l6 = up_conv(args, c_list[4], c_list[3], skip=True)
+        self.l7 = up_conv(args, c_list[3], c_list[2], skip=True)
         self.l8 = up_conv(args, c_list[2], c_list[1], skip=False)
         self.l9 = up_conv(args, c_list[1], c_list[0], skip=False)
         self.conv_out = nn.Conv2d(c_list[0], 1, kernel_size=1, padding=0)
@@ -259,13 +254,19 @@ class switchable_encoder(nn.Module):
         return [x1, x2, x3, x4, x5]
 
 class one_conv(nn.Module):
-    def __init__(self, in_ch, out_ch):
+    def __init__(self, in_ch, out_ch, m='enc'):
         super(one_conv, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, 3, padding=1),
-            nn.InstanceNorm2d(out_ch),
-            nn.ReLU(inplace=True),
-        )
+        if m=='enc':
+            self.conv = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+            )
+        else:
+            self.conv = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 3, padding=1),
+                nn.ReLU(inplace=True),
+            )
     def forward(self,x):
         x = self.conv(x)
         return x
@@ -291,7 +292,7 @@ class up_conv(nn.Module):
             self.up = nn.ConvTranspose2d(in_channels=in_ch, out_channels=in_ch//2, kernel_size=2, stride=2)
         else:
             self.up = nn.ConvTranspose2d(in_channels=in_ch, out_channels=in_ch, kernel_size=2, stride=2)
-        self.conv1 = one_conv(in_ch, out_ch)
+        self.conv1 = one_conv(in_ch, out_ch, m='dec')
         self.conv2 = one_conv_adain(args, out_ch, out_ch)
 
 
@@ -315,7 +316,7 @@ class one_conv_adain(nn.Module):
 
     def forward(self,x_in, shared_code):
         x_in = self.conv(x_in)
-        x_in = self.instanceNorm(x_in)
+        # x_in = self.instanceNorm(x_in)
 
         N, C, h, w = x_in.size()
         mean_y, sigma_y = self.adain(x_in, shared_code)

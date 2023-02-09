@@ -22,6 +22,7 @@ if __name__ == '__main__':
     args.distance_normalize_constant = args.distance_min / args.distance_normalize
 
     data_name_holo = "tie_bead_training_data"
+    args.save_name = 'switchable_unet'
     args.save_folder = data_name_holo + '_' + args.save_name
 
     args.project_path = os.path.join(args.model_root, args.project)
@@ -46,7 +47,19 @@ if __name__ == '__main__':
     N_test = test_holo_loader.__len__()
 
     # define model
+    pretrain_distance_params = torch.load(os.path.join(args.model_root, args.project, 'tie_bead_training_pretrain_distance_generator', 'model.pth'))['model_state_dict']
+    pretrain_distance_params = {i:j for i, j in pretrain_distance_params.items() if 'distance' in i}
+
     model = autoencoder(args).to(device)
+
+    import copy
+    for name, param in model.named_parameters():
+        if name in pretrain_distance_params.keys():
+            param.data = copy.copy(pretrain_distance_params[name])
+            param.requires_grad = False
+
+    model.distance_G.requires_grad_(False)
+
     propagator = Holo_Generator(args).to(device)
 
     op = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
@@ -60,7 +73,7 @@ if __name__ == '__main__':
     criterion = torch.nn.MSELoss().to(device)
 
     N_train = len(train_holo_loader)
-    loss_sum_total, ae_loss_sum, d_loss_sum = 0, 0, 0
+    loss_sum_total, identity_loss_sum, distance_loss_sum = 0, 0, 0
     loss_sum_list=[]
 
     transform_simple = transforms.Compose([transforms.RandomHorizontalFlip(),
@@ -72,25 +85,23 @@ if __name__ == '__main__':
         for batch in tqdm(range(N_train), desc='Iterations'):
 
             model.train()
+            # model.distance_G.eval()
             # diff_intensity = torch.sqrt(next(data_loader))
             diff_intensity, d_true = next(data_loader)
 
             diff_intensity = diff_intensity.to(device).float()
             d_true = -args.distance_normalize_constant + d_true.view(-1, 1).to(device).float()/args.distance_normalize
-            d_trans = torch.randint(low=0, high=17, size = [d_true.shape[0], 1]).to(device).float()/16
+            d_trans = torch.randint(low=0, high=17, size=[d_true.shape[0], 1]).to(device).float()/16
 
-            diff_recon, d_pred = model(diff_intensity, d_true, d_trans)
-
-            ae_loss = criterion(diff_recon, diff_intensity)
-            d_loss = criterion(d_pred, d_true)
+            loss_identity, loss_distance, out_holo_identity, out_holo_trans= model(diff_intensity, d_true, d_trans)
 
             op.zero_grad()
 
-            loss_sum = ae_loss + d_loss
+            loss_sum = args.w_identity*loss_identity + args.w_distance*loss_distance
 
-            ae_loss_sum += ae_loss.item()
-            d_loss_sum += d_loss.item()
-            loss_sum_total += ae_loss.item() + d_loss.item()
+            identity_loss_sum += args.w_identity*loss_identity.item()
+            distance_loss_sum += args.w_distance*loss_distance.item()
+            loss_sum_total += args.w_identity*loss_identity.item() + args.w_distance*loss_distance.item()
 
             loss_sum.backward()
 
@@ -98,12 +109,12 @@ if __name__ == '__main__':
             loss_sum_list.append(loss_sum.item())
 
             if (batch+1)%args.chk_iter == 0:
-                print('[Epoch: %d] Total loss: %1.6f, AE loss: %1.4f, D loss: %1.4f'
-                      %(epo+1, loss_sum_total/args.chk_iter, ae_loss_sum/args.chk_iter, d_loss_sum/args.chk_iter))
-                loss_sum_total, ae_loss_sum, d_loss_sum = 0, 0, 0
+                print('[Epoch: %d] Total loss: %1.6f, Identity loss: %1.4f, Distance loss: %1.4f'
+                      %(epo+1, loss_sum_total/args.chk_iter, identity_loss_sum/args.chk_iter, distance_loss_sum/args.chk_iter))
+                loss_sum_total, identity_loss_sum, distance_loss_sum = 0, 0, 0
 
         else:
-            loss_sum_total, ae_loss_sum, d_loss_sum = 0, 0, 0
+            loss_sum_total, identity_loss_sum, distance_loss_sum = 0, 0, 0
             lr_scheduler.step()
 
             if (epo+1)%args.model_save_iter==0:
@@ -129,11 +140,10 @@ if __name__ == '__main__':
                     diff_intensity = diff_intensity.to(device).float()
                     d_true = -args.distance_normalize_constant + d_true.view(-1, 1, 1, 1).to(
                         device).float() / args.distance_normalize
+                    d_trans = torch.randint(low=0, high=17, size=[d_true.shape[0], 1]).to(device).float() / 16
 
-                    diff_recon, d_pred = model(diff_intensity, d_true)
-
-                    d_trans = torch.randperm(17)[0].view(1,1,1,1).to(device).float()/16
-                    diff_recon_transform, _ = model(diff_intensity, d_trans)
+                    diff_recon, d_pred, diff_recon_transform, _ = model(diff_intensity, d_true,
+                                                                                            d_trans, train=False)
 
 
                     d_true = (d_true + args.distance_normalize_constant) * args.distance_normalize
