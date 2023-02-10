@@ -38,7 +38,7 @@ class Discriminator(nn.Module):
         x = self.l30(x)
         x = self.l40(x)
 
-        out = self.conv_out(self.avg_pool(x)).view(-1, 1)
+        out = self.conv_out(self.avg_pool(x))
         return out
 
 class Distance_Generator(nn.Module):
@@ -100,7 +100,7 @@ class Distance_Generator(nn.Module):
         l5 = self.l51(self.l50(l4))
 
         out_d = self.global_avg_pool(l5)
-        out_d = torch.sigmoid(self.conv_out_d(out_d))
+        out_d = self.conv_out_d(out_d)
 
         return out_d.view(-1, 1)
 
@@ -109,7 +109,8 @@ class autoencoder(nn.Module):
     def __init__(self, args, input_channel=1, output_channel=2):
         super(autoencoder, self).__init__()
 
-        self.use_norm = args.norm_use
+        self.use_norm = args.enc_norm_use
+        self.dec_use_norm = args.dec_norm_use
         self.input_channel = input_channel
         self.output_channel = output_channel
         self.lrelu_use = args.lrelu_use
@@ -137,33 +138,33 @@ class autoencoder(nn.Module):
         self.l41 = CBR(in_channel=c4, out_channel=c4, use_norm=self.use_norm, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
 
         self.l50 = CBR(in_channel=c4, out_channel=c5, use_norm=self.use_norm, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
-        # self.conv_T5 = nn.ConvTranspose2d(in_channels=c4, out_channels=c4, kernel_size=(2,2), stride=(2,2), padding=(0,0))
-        self.l51 = CBR(in_channel=c5, out_channel=c4, use_norm=False, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
-        self.conv_T5 = nn.UpsamplingBilinear2d(scale_factor=2)
+        self.l51 = CBR(in_channel=c5, out_channel=c4, use_norm=self.dec_use_norm, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.conv_T5 = nn.ConvTranspose2d(in_channels=c4, out_channels=c4, kernel_size=(2, 2), stride=(2, 2), padding=(0, 0))
+        # self.conv_T5 = nn.UpsamplingBilinear2d(scale_factor=2)
 
-        self.l61 = CBR(in_channel=c5, out_channel=c4, use_norm=False, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
-        self.l60 = CBR(in_channel=c4, out_channel=c3, use_norm=False, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
-        # self.conv_T6 = nn.ConvTranspose2d(in_channels=c3, out_channels=c3, kernel_size=(2,2), stride=(2,2), padding=(0,0))
-        self.conv_T6 = nn.UpsamplingBilinear2d(scale_factor=2)
+        self.l61 = CBR(in_channel=c5, out_channel=c4, use_norm=self.dec_use_norm, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.l60 = CBR(in_channel=c4, out_channel=c3, use_norm=self.dec_use_norm, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.conv_T6 = nn.ConvTranspose2d(in_channels=c3, out_channels=c3, kernel_size=(2,2), stride=(2,2), padding=(0,0))
+        # self.conv_T6 = nn.UpsamplingBilinear2d(scale_factor=2)
 
-        self.l71 = CBR(in_channel=c4, out_channel=c3, use_norm=False, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
-        self.l70 = CBR(in_channel=c3, out_channel=c2, use_norm=False, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
-        # self.conv_T7 = nn.ConvTranspose2d(in_channels=c2, out_channels=c2, kernel_size=(2,2), stride=(2,2), padding=(0,0))
-        self.conv_T7 = nn.UpsamplingBilinear2d(scale_factor=2)
+        self.l71 = CBR(in_channel=c4, out_channel=c3, use_norm=self.dec_use_norm, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.l70 = CBR(in_channel=c3, out_channel=c2, use_norm=self.dec_use_norm, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.conv_T7 = nn.ConvTranspose2d(in_channels=c2, out_channels=c2, kernel_size=(2,2), stride=(2,2), padding=(0,0))
+        # self.conv_T7 = nn.UpsamplingBilinear2d(scale_factor=2)
 
-        self.l81 = CBR(in_channel=c3, out_channel=c2, use_norm=False, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
-        self.l80 = CBR(in_channel=c2, out_channel=c1, use_norm=False, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
-        # self.conv_T8 = nn.ConvTranspose2d(in_channels=c1, out_channels=c1, kernel_size=(2,2), stride=(2,2), padding=(0,0))
-        self.conv_T8 = nn.UpsamplingBilinear2d(scale_factor=2)
+        self.l81 = CBR(in_channel=c3, out_channel=c2, use_norm=self.dec_use_norm, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.l80 = CBR(in_channel=c2, out_channel=c1, use_norm=self.dec_use_norm, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.conv_T8 = nn.ConvTranspose2d(in_channels=c1, out_channels=c1, kernel_size=(2,2), stride=(2,2), padding=(0,0))
+        # self.conv_T8 = nn.UpsamplingBilinear2d(scale_factor=2)
 
-        self.l91 = CBR(in_channel=c2, out_channel=c1, use_norm=False, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
-        self.l90 = CBR(in_channel=c1, out_channel=c1, use_norm=False, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.l91 = CBR(in_channel=c2, out_channel=c1, use_norm=self.dec_use_norm, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
+        self.l90 = CBR(in_channel=c1, out_channel=c1, use_norm=self.dec_use_norm, lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
 
         self.adain = AdaIN()
 
         self.conv_out_holo = nn.Conv2d(in_channels=c1, out_channels=1, kernel_size=(1, 1), padding=0)
 
-        self.mpool0 = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.mpool0 = nn.MaxPool2d(kernel_size=2, stride=2)
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.sigmoid = nn.Sigmoid()
 
@@ -173,7 +174,7 @@ class autoencoder(nn.Module):
             self.activation = nn.ReLU()
 
         self.relu = nn.ReLU()
-        self.shared_code_generator = nn.Sequential(nn.Linear(self.z_dim, 128),
+        self.shared_code_generator = nn.Sequential(nn.Linear(1, 128),
                                                    nn.Linear(128, 128),
                                                    nn.Linear(128, 128),
                                                    nn.Linear(128, 128),
@@ -225,15 +226,21 @@ class autoencoder(nn.Module):
 
         l5 = self.conv_T5(self.l51(self.forward_code_g(x, distance_code, self.l5_code_gm, self.l5_code_gs)))
 
+        # l6 = l5
         l6 = self.l61(torch.cat([l5, skip[0]], dim=1))
         l6 = self.conv_T6(self.l60(self.forward_code_g(l6, distance_code, self.l6_code_gm, self.l6_code_gs)))
+        # l6 = self.l60(self.forward_code_g(l6, distance_code, self.l6_code_gm, self.l6_code_gs))
 
+        # l7 = l6
         l7 = self.l71(torch.cat([l6, skip[1]], dim=1))
         l7 = self.conv_T7(self.l70(self.forward_code_g(l7, distance_code, self.l7_code_gm, self.l7_code_gs)))
 
+        # l8 = l7
         l8 = self.l81(torch.cat([l7, skip[2]], dim=1))
         l8 = self.conv_T8(self.l80(self.forward_code_g(l8, distance_code, self.l8_code_gm, self.l8_code_gs)))
+        # l8 =self.l80(self.forward_code_g(l8, distance_code, self.l8_code_gm, self.l8_code_gs))
 
+        # l9 = l8
         l9 = self.l91(torch.cat([l8, skip[3]], dim=1))
         out = self.l90(self.forward_code_g(l9, distance_code, self.l9_code_gm, self.l9_code_gs))
 
@@ -245,12 +252,14 @@ class autoencoder(nn.Module):
         # encoder part
         l1 = self.l11(self.l10(x))
         l1_pool = self.mpool0(l1)
+        # l1_pool = l1
 
         l2 = self.l21(self.l20(l1_pool))
         l2_pool = self.mpool0(l2)
 
         l3 = self.l31(self.l30(l2_pool))
         l3_pool = self.mpool0(l3)
+        # l3_pool = l3
 
         l4 = self.l41(self.l40(l3_pool))
         l4_pool = self.mpool0(l4)
@@ -262,13 +271,15 @@ class autoencoder(nn.Module):
     def forward(self, x, d_true, d_trans, train=True):
 
         assert d_true.shape == d_trans.shape
-        b, _ = d_true.shape
+        # b, _ = d_true.shape
 
         # code generator
-        d_true_vec = torch.rand(size=[b, self.z_dim]).to(d_true.device)*0.1 + d_true.expand(b, self.z_dim)
+        d_true_vec = d_true
+        # d_true_vec = torch.rand(size=[b, self.z_dim]).to(d_true.device)*0.1 + d_true.expand(b, self.z_dim)
         d_true_code = self.shared_code_generator(d_true_vec)
 
-        d_trans_vec = torch.rand(size=[b, self.z_dim]).to(d_trans.device)*0.1 + d_trans.expand(b, self.z_dim)
+        d_trans_vec = d_trans
+        # d_trans_vec = torch.rand(size=[b, self.z_dim]).to(d_trans.device)*0.1 + d_trans.expand(b, self.z_dim)
         d_trans_code = self.shared_code_generator(d_trans_vec)
 
         # encoder
@@ -279,12 +290,14 @@ class autoencoder(nn.Module):
 
         # transformation
         out_holo_trans = self.forward_decoder(encoded, skip, d_trans_code)
+        _, trans_encoded = self.forward_encoder(out_holo_trans)
 
-        distance = self.distance_G(x)
+        distance = self.distance_G(out_holo_identity)
         distance_trans = self.distance_G(out_holo_trans)
 
         if train:
             loss_identity = self.mse_loss(out_holo_identity, x)
+            # loss_identity = self.mse_loss(self.forward_IN(trans_encoded), self.forward_IN(encoded))
             loss_distance = self.mse_loss(distance, d_true) + self.mse_loss(distance_trans, d_trans)
 
             return loss_identity, loss_distance, out_holo_identity, out_holo_trans

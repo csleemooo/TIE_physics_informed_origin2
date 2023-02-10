@@ -7,10 +7,12 @@ from tqdm import tqdm
 import torch.nn.functional as F
 
 from model.autoencoder import autoencoder, Discriminator
+from functions.gradient_penalty import calc_gradient_penalty
 from model.Forward_model import Holo_Generator
 from functions.data_loader import Holo_Recon_Dataloader
 from functions.pretrain_argument import parse_args
 from functions.functions import *
+from torchsummary import summary
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # matplotlib.use('Agg')
@@ -22,7 +24,7 @@ if __name__ == '__main__':
     args.distance_normalize_constant = args.distance_min / args.distance_normalize
 
     data_name_holo = "tie_bead_training_data"
-    args.save_name = 'switchable_unet'
+    # args.save_name = 'switchable_unet_wo_skip_connection_w_norm'
     args.save_folder = data_name_holo + '_' + args.save_name
 
     args.project_path = os.path.join(args.model_root, args.project)
@@ -47,20 +49,28 @@ if __name__ == '__main__':
     N_test = test_holo_loader.__len__()
 
     # define model
-    pretrain_distance_params = torch.load(os.path.join(args.model_root, args.project, 'tie_bead_training_pretrain_distance_generator', 'model.pth'))['model_state_dict']
-    pretrain_distance_params = {i:j for i, j in pretrain_distance_params.items() if 'distance' in i}
+    pretrain_distance_params = torch.load(os.path.join(args.model_root, args.project, 'tie_bead_training_pretrain_distance_generator2', 'model.pth'))['model_state_dict']
+    pretrain_distance_params = {i:j for i, j in pretrain_distance_params.items()}
 
     model = autoencoder(args).to(device)
     model_disc = Discriminator(args).to(device)
 
+    model_stats = summary(model)
+    with open(os.path.join(args.saving_path, 'model_log.txt'), 'w') as f:
+        f.write(str(model_stats))
+
     import copy
     for name, param in model.named_parameters():
-        if name in pretrain_distance_params.keys():
-            param.data = copy.copy(pretrain_distance_params[name])
-            param.requires_grad = False
+
+        if 'distance_G' in name:
+            name = name.replace('distance_G.', '')
+            if name in pretrain_distance_params.keys():
+                param.data = copy.copy(pretrain_distance_params[name])
+                param.requires_grad = False
 
     model.distance_G.requires_grad_(False)
 
+    print(model)
     propagator = Holo_Generator(args).to(device)
 
     op = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
@@ -72,13 +82,14 @@ if __name__ == '__main__':
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=args.epochs, eta_min=0)
 
     # target data
-    label_real = torch.full((args.batch_size, 1, 1, 1), 1, device=device).float()
-    label_fake = torch.full((args.batch_size, 1, 1, 1), 0, device=device).float()
+    label_real = torch.full((args.batch_size, 1), 1, device=device).float()
+    label_fake = torch.full((args.batch_size, 1), 0, device=device).float()
     loss_list = {'loss_sum_total': []}
     criterion = torch.nn.MSELoss().to(device)
+    criterion_wgan = torch.mean
 
     N_train = len(train_holo_loader)
-    loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum = 0, 0, 0,0,0
+    loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum, disc_penalty_loss_sum = 0, 0, 0,0,0, 0
     loss_sum_list=[]
 
     transform_simple = transforms.Compose([transforms.RandomHorizontalFlip(),
@@ -102,20 +113,25 @@ if __name__ == '__main__':
             loss_identity, loss_distance, out_holo_identity, out_holo_trans= model(diff_intensity, d_true, d_trans)
 
             op_disc.zero_grad()
-
             fake_D = model_disc(out_holo_trans.detach())
             real_D = model_disc(diff_intensity)
 
-            loss_disc = criterion(fake_D, label_fake) + criterion(real_D, label_real)
+            D_penalty_loss = args.penalty_regularizer * calc_gradient_penalty(model_disc, diff_intensity,
+                                                                              out_holo_trans,
+                                                                              real_D.shape[0], device)
+            D_adversarial_loss = criterion_wgan(fake_D.mean(dim=(-2, -1))) - criterion_wgan(real_D.mean(dim=(-2, -1)))
 
-            disc_loss_sum += loss_disc.item()
-            loss_disc.backward()
+            D_loss = D_adversarial_loss + D_penalty_loss
+
+            disc_loss_sum += D_adversarial_loss.item()
+            disc_penalty_loss_sum += D_penalty_loss.item()
+
+            D_loss.backward()
             op_disc.step()
-
 
             op.zero_grad()
 
-            gen_loss = criterion(model_disc(out_holo_trans), label_real)
+            gen_loss = -1*criterion_wgan(model_disc(out_holo_trans).mean(dim=(-2, -1)))
 
             loss_sum = args.w_identity*loss_identity + args.w_distance*loss_distance + gen_loss
 
@@ -130,13 +146,13 @@ if __name__ == '__main__':
             loss_sum_list.append(loss_sum.item())
 
             if (batch+1)%args.chk_iter == 0:
-                print('[Epoch: %d] Total loss: %1.6f, Identity loss: %1.4f, Distance loss: %1.4f, Discriminator loss: %1.4f, Generator loss: %1.4f'
+                print('[Epoch: %d] Total loss: %1.6f, Identity loss: %1.4f, Distance loss: %1.4f, D loss: %1.4f, D_penalty_loss: %1.4f, G loss: %1.4f'
                       %(epo+1, loss_sum_total/args.chk_iter, identity_loss_sum/args.chk_iter, distance_loss_sum/args.chk_iter,
-                        disc_loss_sum/args.chk_iter, gen_loss_sum/args.chk_iter))
-                loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum = 0, 0, 0, 0, 0
+                        disc_loss_sum/args.chk_iter, disc_penalty_loss_sum/args.chk_iter, gen_loss_sum/args.chk_iter))
+                loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum, disc_penalty_loss_sum = 0, 0, 0,0,0, 0
 
         else:
-            loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum = 0, 0, 0, 0, 0
+            loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum, disc_penalty_loss_sum = 0, 0, 0,0,0, 0
             lr_scheduler.step()
 
             if (epo+1)%args.model_save_iter==0:
