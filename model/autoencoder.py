@@ -174,7 +174,7 @@ class autoencoder(nn.Module):
             self.activation = nn.ReLU()
 
         self.relu = nn.ReLU()
-        self.shared_code_generator = nn.Sequential(nn.Linear(1, 128),
+        self.shared_code_generator = nn.Sequential(nn.Linear(100, 128),
                                                    nn.Linear(128, 128),
                                                    nn.Linear(128, 128),
                                                    nn.Linear(128, 128),
@@ -271,15 +271,15 @@ class autoencoder(nn.Module):
     def forward(self, x, d_true, d_trans, train=True):
 
         assert d_true.shape == d_trans.shape
-        # b, _ = d_true.shape
+        b, _ = d_true.shape
 
         # code generator
-        d_true_vec = d_true
-        # d_true_vec = torch.rand(size=[b, self.z_dim]).to(d_true.device)*0.1 + d_true.expand(b, self.z_dim)
+        # d_true_vec = d_true
+        d_true_vec = torch.rand(size=[b, self.z_dim]).to(d_true.device)*0.1 + d_true.expand(b, self.z_dim)
         d_true_code = self.shared_code_generator(d_true_vec)
 
-        d_trans_vec = d_trans
-        # d_trans_vec = torch.rand(size=[b, self.z_dim]).to(d_trans.device)*0.1 + d_trans.expand(b, self.z_dim)
+        # d_trans_vec = d_trans
+        d_trans_vec = torch.rand(size=[b, self.z_dim]).to(d_trans.device)*0.1 + d_trans.expand(b, self.z_dim)
         d_trans_code = self.shared_code_generator(d_trans_vec)
 
         # encoder
