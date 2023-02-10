@@ -29,19 +29,6 @@ class Discriminator(nn.Module):
         self.conv_out = nn.Conv2d(in_channels=c4, out_channels=self.output_channel, kernel_size=(1, 1), stride=(1, 1))
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
 
-        if self.lrelu_use:
-            self.activation = nn.LeakyReLU()
-        else:
-            self.activation = nn.ReLU()
-
-        self.linear_out = nn.Sequential(nn.Flatten(),
-                                        nn.Linear(c4, c4),
-                                        self.activation,
-                                        nn.Linear(c4, c4),
-                                        self.activation,
-                                        nn.Linear(c4, 1)
-                                        )
-
         self.apply(weights_initialize_normal)
 
     def forward(self, x):
@@ -51,10 +38,8 @@ class Discriminator(nn.Module):
         x = self.l30(x)
         x = self.l40(x)
 
-        # out = self.conv_out(self.avg_pool(x))
-        # return out
-        out = self.linear_out(self.avg_pool(x))
-        return out.view(-1,1,1,1)
+        out = self.conv_out(self.avg_pool(x))
+        return out
 
 class Distance_Generator(nn.Module):
 
@@ -286,17 +271,15 @@ class autoencoder(nn.Module):
     def forward(self, x, d_true, d_trans, train=True):
 
         assert d_true.shape == d_trans.shape
-        b, _ = d_true.shape
+        # b, _ = d_true.shape
 
         # code generator
         d_true_vec = d_true
         # d_true_vec = torch.rand(size=[b, self.z_dim]).to(d_true.device)*0.1 + d_true.expand(b, self.z_dim)
-        # d_true_vec = torch.cat([torch.rand(size=[b, self.z_dim-1]).to(d_true.device), d_true], dim=1)
         d_true_code = self.shared_code_generator(d_true_vec)
 
         d_trans_vec = d_trans
         # d_trans_vec = torch.rand(size=[b, self.z_dim]).to(d_trans.device)*0.1 + d_trans.expand(b, self.z_dim)
-        # d_trans_vec = torch.cat([torch.rand(size=[b, self.z_dim-1]).to(d_trans.device), d_trans], dim=1)
         d_trans_code = self.shared_code_generator(d_trans_vec)
 
         # encoder
