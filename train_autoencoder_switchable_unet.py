@@ -133,9 +133,9 @@ if __name__ == '__main__':
 
             gen_loss = -1*criterion_wgan(model_disc(out_holo_trans).mean(dim=(-2, -1)))
 
-            loss_sum = args.w_identity*loss_identity + args.w_distance*loss_distance + gen_loss
+            loss_sum = args.w_identity*loss_identity + args.w_distance*loss_distance + args.w_gen*gen_loss
 
-            gen_loss_sum += gen_loss.item()
+            gen_loss_sum += args.w_gen*gen_loss.item()
             identity_loss_sum += args.w_identity*loss_identity.item()
             distance_loss_sum += args.w_distance*loss_distance.item()
             loss_sum_total += args.w_identity*loss_identity.item() + args.w_distance*loss_distance.item()
