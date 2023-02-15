@@ -9,7 +9,7 @@ class Discriminator(nn.Module):
         self.input_channel = input_channel
         self.output_channel = 1   # check ?!
         self.use_norm = True
-        self.lrelu_use = args.lrelu_use
+        self.lrelu_use = True
         self.batch_mode='B'
 
         # c1 = args.initial_channel
@@ -25,7 +25,7 @@ class Discriminator(nn.Module):
                        lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
         self.l30 = CBR(in_channel=c2, out_channel=c3, use_norm=self.use_norm, kernel=4, padding=0, stride=2,
                        lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
-        self.l40 = CBR(in_channel=c3, out_channel=c4, use_norm=self.use_norm, kernel=4, padding=0, stride=2,
+        self.l40 = CBR(in_channel=c3, out_channel=c4, use_norm=self.use_norm, kernel=4, padding=0, stride=1,
                        lrelu_use=self.lrelu_use, batch_mode=self.batch_mode)
 
         self.conv_out = nn.Conv2d(in_channels=c4, out_channels=self.output_channel, kernel_size=(1, 1), stride=(1, 1))
@@ -40,7 +40,8 @@ class Discriminator(nn.Module):
         x = self.l30(x)
         x = self.l40(x)
 
-        out = self.conv_out(self.avg_pool(x))
+        # out = self.conv_out(self.avg_pool(x))
+        out = self.conv_out(x)
         return out
 class Distance_Generator(nn.Module):
 
@@ -213,16 +214,16 @@ class Distance_Generator_original(nn.Module):
 
         return out_d.view(-1, 1)
 
-class autoencoder(nn.Module):
+class switchable_cycle(nn.Module):
 
     def __init__(self, args, input_channel=1, output_channel=2):
-        super(autoencoder, self).__init__()
+        super(switchable_cycle, self).__init__()
 
         self.use_norm = True
         self.dec_use_norm = True
         self.input_channel = input_channel
         self.output_channel = output_channel
-        self.lrelu_use = args.lrelu_use
+        self.lrelu_use = True
         # self.batch_mode=args.batch_mode
         self.batch_mode='I'
         self.z_dim = 100
@@ -293,10 +294,10 @@ class autoencoder(nn.Module):
                                                    nn.Linear(128, 128),
                                                    nn.Linear(128, 128))
 
-        [self.l1_code_gm, self.l1_code_gs] = self.build_code_g(c1)
-        [self.l2_code_gm, self.l2_code_gs] = self.build_code_g(c2)
-        [self.l3_code_gm, self.l3_code_gs] = self.build_code_g(c3)
-        [self.l4_code_gm, self.l4_code_gs] = self.build_code_g(c4)
+        # [self.l1_code_gm, self.l1_code_gs] = self.build_code_g(c1)
+        # [self.l2_code_gm, self.l2_code_gs] = self.build_code_g(c2)
+        # [self.l3_code_gm, self.l3_code_gs] = self.build_code_g(c3)
+        # [self.l4_code_gm, self.l4_code_gs] = self.build_code_g(c4)
 
         [self.l5_code_gm, self.l5_code_gs] = self.build_code_g(c4)
         [self.l6_code_gm, self.l6_code_gs] = self.build_code_g(c3)
@@ -305,6 +306,7 @@ class autoencoder(nn.Module):
         [self.l9_code_gm, self.l9_code_gs] = self.build_code_g(c1)
 
         self.mse_loss = nn.MSELoss()
+        self.l1_loss = nn.L1Loss()
         self.apply(weights_initialize_normal)
 
     def build_code_g(self, out_ch):
@@ -365,22 +367,22 @@ class autoencoder(nn.Module):
 
     def forward_encoder(self, x, distance_code):
         # encoder part
-        l1 = self.l11(self.forward_code_g(self.l10(x), distance_code, self.l1_code_gm, self.l1_code_gs))
-        # l1 = self.l11(self.l10(x))
+        # l1 = self.l11(self.forward_code_g(self.l10(x), distance_code, self.l1_code_gm, self.l1_code_gs))
+        l1 = self.l11(self.l10(x))
         l1_pool = self.mpool0(l1)
         # l1_pool = l1
 
-        l2 = self.l21(self.forward_code_g(self.l20(l1_pool), distance_code, self.l2_code_gm, self.l2_code_gs))
-        # l2 = self.l21(self.l20(l1_pool))
+        # l2 = self.l21(self.forward_code_g(self.l20(l1_pool), distance_code, self.l2_code_gm, self.l2_code_gs))
+        l2 = self.l21(self.l20(l1_pool))
         l2_pool = self.mpool0(l2)
 
-        l3 = self.l31(self.forward_code_g(self.l30(l2_pool), distance_code, self.l3_code_gm, self.l3_code_gs))
-        # l3 = self.l31(self.l30(l2_pool))
+        # l3 = self.l31(self.forward_code_g(self.l30(l2_pool), distance_code, self.l3_code_gm, self.l3_code_gs))
+        l3 = self.l31(self.l30(l2_pool))
         l3_pool = self.mpool0(l3)
         # l3_pool = l3
 
-        l4 = self.l41(self.forward_code_g(self.l40(l3_pool), distance_code, self.l4_code_gm, self.l4_code_gs))
-        # l4 = self.l41(self.l40(l3_pool))
+        # l4 = self.l41(self.forward_code_g(self.l40(l3_pool), distance_code, self.l4_code_gm, self.l4_code_gs))
+        l4 = self.l41(self.l40(l3_pool))
         l4_pool = self.mpool0(l4)
 
         encoded = self.l50(l4_pool)
@@ -410,13 +412,16 @@ class autoencoder(nn.Module):
         # transformation
         skip, encoded = self.forward_encoder(x, d_trans_code)
         out_holo_trans = self.forward_decoder(encoded, skip, d_trans_code)
-        # _, trans_encoded = self.forward_encoder(out_holo_trans)
+
+        # cycle reconstruction
+        skip, encoded = self.forward_encoder(out_holo_trans, d_true_code)
+        out_holo_cycle = self.forward_decoder(encoded, skip, d_true_code)
 
         distance = self.distance_G(out_holo_identity)
         distance_trans = self.distance_G(out_holo_trans)
 
         if train:
-            loss_identity = self.mse_loss(out_holo_identity, x)
+            loss_identity = 0.5*self.l1_loss(out_holo_identity, x) + self.l1_loss(out_holo_cycle, x)
             # loss_identity = self.mse_loss(self.forward_IN(trans_encoded), self.forward_IN(encoded))
             loss_distance = self.mse_loss(distance, d_true) + self.mse_loss(distance_trans, d_trans)
 

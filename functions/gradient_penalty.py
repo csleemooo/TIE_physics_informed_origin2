@@ -21,7 +21,7 @@ def calc_gradient_penalty(netD, real_data, fake_data, BATCH_SIZE, device):
 
     gradients = autograd.grad(outputs=disc_interpolates[:, 0, 0, 0].reshape(BATCH_SIZE, 1, 1, 1), inputs=interpolates,
                               grad_outputs=torch.ones((BATCH_SIZE, 1, 1, 1)).to(device=device),
-                              create_graph=True, retain_graph=True, only_inputs=True)[0].reshape(BATCH_SIZE, -1)
+                              create_graph=True, only_inputs=True)[0].reshape(BATCH_SIZE, -1)
 
     # gradient penalty for patch gan
     grad_norm2 = gradients.norm(2, dim=(-2, -1))  # matrix norm 2

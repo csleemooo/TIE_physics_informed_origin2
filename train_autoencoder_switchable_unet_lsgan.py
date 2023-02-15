@@ -84,14 +84,15 @@ if __name__ == '__main__':
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(op, T_max=args.epochs, eta_min=0)
 
     # target data
-    label_real = torch.full((args.batch_size, 1), 1, device=device).float()
-    label_fake = torch.full((args.batch_size, 1), 0, device=device).float()
+    s = 27
+    label_real = torch.full((args.batch_size, 1, s, s), 1.0, device=device).float()
+    label_fake = torch.full((args.batch_size, 1, s, s), 0.0, device=device).float()
     loss_list = {'loss_sum_total': []}
     criterion = torch.nn.MSELoss().to(device)
     criterion_wgan = torch.mean
 
     N_train = len(train_holo_loader)
-    loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum, disc_penalty_loss_sum = 0, 0, 0,0,0, 0
+    loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum = 0, 0, 0,0,0
     loss_sum_list=[]
 
     transform_simple = transforms.Compose([transforms.RandomHorizontalFlip(),
@@ -118,22 +119,18 @@ if __name__ == '__main__':
             fake_D = model_disc(out_holo_trans.detach())
             real_D = model_disc(diff_intensity)
 
-            D_penalty_loss = args.penalty_regularizer * calc_gradient_penalty(model_disc, diff_intensity,
-                                                                              out_holo_trans,
-                                                                              real_D.shape[0], device)
-            D_adversarial_loss = criterion_wgan(fake_D.mean(dim=(-2, -1))) - criterion_wgan(real_D.mean(dim=(-2, -1)))
+            D_adversarial_loss = criterion(fake_D, label_fake) + criterion(real_D, label_real)
 
-            D_loss = D_adversarial_loss + D_penalty_loss
+            D_loss = D_adversarial_loss
 
             disc_loss_sum += D_adversarial_loss.item()
-            disc_penalty_loss_sum += D_penalty_loss.item()
 
             D_loss.backward()
             op_disc.step()
 
             op.zero_grad()
 
-            gen_loss = -1*criterion_wgan(model_disc(out_holo_trans).mean(dim=(-2, -1)))
+            gen_loss = criterion(model_disc(out_holo_trans), label_real)
 
             loss_sum = args.w_identity*loss_identity + args.w_distance*loss_distance + args.w_gen*gen_loss
 
@@ -148,13 +145,13 @@ if __name__ == '__main__':
             loss_sum_list.append(loss_sum.item())
 
             if (batch+1)%args.chk_iter == 0:
-                print('[Epoch: %d] Total loss: %1.6f, Identity loss: %1.4f, Distance loss: %1.4f, D loss: %1.4f, D_penalty_loss: %1.4f, G loss: %1.4f'
+                print('[Epoch: %d] Total loss: %1.6f, Identity loss: %1.4f, Distance loss: %1.4f, D loss: %1.4f, G loss: %1.4f'
                       %(epo+1, loss_sum_total/args.chk_iter, identity_loss_sum/args.chk_iter, distance_loss_sum/args.chk_iter,
-                        disc_loss_sum/args.chk_iter, disc_penalty_loss_sum/args.chk_iter, gen_loss_sum/args.chk_iter))
-                loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum, disc_penalty_loss_sum = 0, 0, 0,0,0, 0
+                        disc_loss_sum/args.chk_iter, gen_loss_sum/args.chk_iter))
+                loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum = 0, 0, 0,0,0
 
         else:
-            loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum, disc_penalty_loss_sum = 0, 0, 0,0,0, 0
+            loss_sum_total, identity_loss_sum, distance_loss_sum, disc_loss_sum, gen_loss_sum = 0, 0, 0,0,0
             lr_scheduler.step()
             lr_scheduler_disc.step()
 
